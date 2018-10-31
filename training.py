@@ -9,7 +9,7 @@ import os
 from skimage import io
 from sklearn.model_selection import train_test_split
 import keras
-from keras.models import Sequential
+from keras.models import Sequential,Model
 
 r = csv.reader(open('train.csv', 'r', encoding = 'utf8'))
 x_test=[]
@@ -32,7 +32,6 @@ for file in os.listdir("test/"):
     y_test.append(d[file.split('.')[0]])
 # ----
 
-
 x_train = np.array(x_train).astype(np.float32)
 y_train = np.array(y_train)
 x_test = np.array(x_test).astype(np.float32)
@@ -42,63 +41,61 @@ x_train -= mean_image
 x_test -= mean_image
 x_train /= 128.
 x_test /= 128.
-#x_test /= 256.
+# For VGG16/19
+#x_test /= 256. 
 #x_train /= 256.
 nb_classes = 5
 
+M = int(input("Enter the model: \n'0' for Sequential(a simple CNN)\n'1' for ResNet50\n'2' for InceptionResNetV2\n'3' for MobileNetV2\n: "))
+modelist = ['Sequential', 'ResNet50', 'InceptionResNetV2', ' MobileNetV2']
+modelname = modelist[M]
 
-modelname = 'Sequential_BN'
 try:
     os.mkdir(modelname)
 except:
     pass
-#base_model = keras.applications.resnet50.ResNet50(include_top=False, pooling='avg')
-#base_model = keras.applications.inception_resnet_v2.InceptionResNetV2(include_top=False, pooling='avg')
-#base_model = keras.applications.MobileNetV2(include_top=False, pooling='avg')
-#outputs = Dense(nb_classes, activation='sigmoid')(base_model.output)
-#model = Model(base_model.inputs, outputs)
 
+if M == 0:
+    # instantiate model
+    model = Sequential()
+    model.add(Conv2D(32, (3, 3), padding='same', input_shape=x_train.shape[1:]))
+    #model.add(BatchNormalization())
+    model.add(Activation('relu'))
+
+    model.add(Conv2D(32, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+
+    model.add(Conv2D(32, (3, 3)))
+    model.add(Activation('relu'))
+
+    model.add(Conv2D(32, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+
+    model.add(Flatten())
+    model.add(Dense(128))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(nb_classes))
+    model.add(Activation('sigmoid'))
+else:
+    if M == 1:
+        base_model = keras.applications.resnet50.ResNet50(include_top=False, pooling='avg')
+    elif M == 2:
+        base_model = keras.applications.inception_resnet_v2.InceptionResNetV2(include_top=False, pooling='avg')
+    elif M == 3:
+        base_model = keras.applications.MobileNetV2(include_top=False, pooling='avg')
+    outputs = Dense(nb_classes, activation='sigmoid')(base_model.output)
+    model = Model(base_model.inputs, outputs)
 
 
 lr_reducer = ReduceLROnPlateau(factor=np.sqrt(
     0.1), cooldown=0, patience=5, min_lr=0.5e-6)
 #early_stopper = EarlyStopping(min_delta=0.001, patience=10)
 csv_logger = CSVLogger(modelname + '/BinaryAccuracy.csv')
-
-
-# instantiate model
-model = Sequential()
-
-
-model.add(Conv2D(32, (3, 3), padding='same',
-                 input_shape=x_train.shape[1:]))
-#model.add(BatchNormalization())
-model.add(Activation('relu'))
-
-model.add(Conv2D(32, (3, 3)))
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
-
-model.add(Conv2D(32, (3, 3)))
-model.add(Activation('relu'))
-
-model.add(Conv2D(32, (3, 3)))
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
-
-model.add(Flatten())
-model.add(Dense(128))
-model.add(Activation('relu'))
-model.add(Dropout(0.5))
-model.add(Dense(nb_classes))
-model.add(Activation('sigmoid'))
-
-
-
-
-
 
 model.compile(loss='binary_crossentropy',
               optimizer='adam',
@@ -159,10 +156,6 @@ class Accuracy(Callback):
             writer.writerow([epoch,self.all_test, self.all_train, self.one_test, self.one_train])
 
 
-
-        
-
-
 filepath = modelname+"/{epoch:02d}-{val_loss:.2f}.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor='val_binary_accuracy', verbose=1, save_best_only=True,
                                              save_weights_only=False, mode='max', period=1)
@@ -175,7 +168,7 @@ model.fit_generator(datagen.flow(x_train, y_train, batch_size=32),
                     callbacks=[lr_reducer, csv_logger, checkpoint, Accuracy(x_test, y_test, x_train, y_train)])
 
 
-"""
+""" test
 model = load_model('20-0.30.hdf5')
 for i in [493, 501, 502, 503, 893, 894, 895]:
     p = io.imread("img/%d.jpg" % i)
