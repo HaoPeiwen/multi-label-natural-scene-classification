@@ -4,6 +4,7 @@
 # Usage
 ## Environment
 Win10 with Python 3.6.5, CUDA 9.0, Tensorflow-GPU, running these cmds:
+
     $ pip install tensorflow-gpu
     $ pip install keras
 
